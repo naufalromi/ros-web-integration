@@ -6,6 +6,8 @@ const cors = require('cors');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const fs = require('fs');
+const http = require('http');
+const https = require('https');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -53,9 +55,45 @@ function getTunnelUrl() {
 app.get('/api/config', (req, res) => {
     res.json({
         rosbridgeUrl: tunnelConfig.rosbridgeUrl || process.env.ROSBRIDGE_URL || '',
-        cameraUrl: tunnelConfig.cameraUrl || process.env.CAMERA_URL || '',
+        // The browser always loads camera frames through this server.  The
+        // camera source itself may safely remain an internal HTTP endpoint.
+        cameraAvailable: Boolean(tunnelConfig.cameraUrl || process.env.CAMERA_URL),
         webUrl: getTunnelUrl()
     });
+});
+
+app.get('/api/camera/stream', (req, res) => {
+    const cameraUrl = tunnelConfig.cameraUrl || process.env.CAMERA_URL;
+    if (!cameraUrl) {
+        return res.status(503).json({ error: 'Camera source is not configured' });
+    }
+
+    let target;
+    try {
+        target = new URL('/stream', cameraUrl);
+        const queryStart = req.originalUrl.indexOf('?');
+        if (queryStart !== -1) target.search = req.originalUrl.slice(queryStart);
+    } catch (_) {
+        return res.status(500).json({ error: 'Invalid camera source URL' });
+    }
+
+    const client = target.protocol === 'https:' ? https : target.protocol === 'http:' ? http : null;
+    if (!client) return res.status(500).json({ error: 'Unsupported camera source protocol' });
+
+    const upstream = client.get(target, { headers: { accept: req.get('accept') || 'image/*' } }, upstreamRes => {
+        res.status(upstreamRes.statusCode || 502);
+        for (const header of ['content-type', 'content-length', 'cache-control']) {
+            if (upstreamRes.headers[header]) res.setHeader(header, upstreamRes.headers[header]);
+        }
+        upstreamRes.pipe(res);
+    });
+
+    upstream.setTimeout(15000, () => upstream.destroy(new Error('Camera request timed out')));
+    upstream.on('error', err => {
+        if (!res.headersSent) res.status(502).json({ error: 'Camera source unavailable' });
+        else res.destroy(err);
+    });
+    req.on('close', () => upstream.destroy());
 });
 
 const TUNNEL_URL_PATTERN = /^https?:\/\/[a-zA-Z0-9.-]+\.trycloudflare\.com$/;

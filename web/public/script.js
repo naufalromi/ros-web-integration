@@ -152,9 +152,12 @@ function setCameraUrl(url) {
         return;
     }
 
-    camUrl = url;
+    // Keep the camera source off the browser-facing network.  The backend
+    // proxies the MJPEG stream, preventing HTTP camera URLs from becoming
+    // mixed content when this UI is served over HTTPS.
+    camUrl = '/api/camera/stream';
     updateCamStatus('connecting', 'Kamera: Menghubungkan...');
-    imgEl.src = url + '/stream?topic=/camera/rgb/image_raw&quality=10';
+    imgEl.src = camUrl + '?topic=/camera/rgb/image_raw&quality=10';
 
     imgEl.onload = () => {
         updateCamStatus('active', 'Kamera: Aktif');
@@ -166,7 +169,7 @@ function setCameraUrl(url) {
             camRetryCount++;
             updateCamStatus('connecting', `Kamera: Gagal, percobaan ulang ${camRetryCount}/3...`);
             camRetryTimeout = setTimeout(() => {
-                imgEl.src = camUrl + '/stream?topic=/camera/rgb/image_raw&quality=10&t=' + Date.now();
+                imgEl.src = camUrl + '?topic=/camera/rgb/image_raw&quality=10&t=' + Date.now();
             }, 5000);
         } else {
             updateCamStatus('error', 'Kamera: Gagal setelah 3 percobaan');
@@ -223,13 +226,15 @@ async function init() {
         }
 
         const finalRosUrl = cfg.rosbridgeUrl || savedRosbridgeUrl;
-        const finalCamUrl = cfg.cameraUrl || savedCameraUrl;
+        const finalCamUrl = cfg.cameraAvailable ? 'configured' : savedCameraUrl;
         if (cfg.rosbridgeUrl) localStorage.setItem('rosbridgeUrl', cfg.rosbridgeUrl);
-        if (cfg.cameraUrl) localStorage.setItem('cameraUrl', cfg.cameraUrl);
+        if (cfg.cameraAvailable) localStorage.setItem('cameraUrl', 'configured');
         if (!savedRosbridgeUrl && finalRosUrl) {
             updateStatus('connecting', 'Status: Menghubungkan...');
             setCameraUrl(finalCamUrl);
             connectToRos(finalRosUrl);
+        } else if (finalCamUrl) {
+            setCameraUrl(finalCamUrl);
         }
     } catch (_) {}
 
