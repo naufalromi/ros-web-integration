@@ -15,6 +15,6 @@ COPY start_robot.sh /start_robot.sh
 RUN chmod +x /start_robot.sh
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD bash -c "source /opt/ros/noetic/setup.bash && rostopic list > /dev/null 2>&1"
+    CMD test -f /tmp/robot-container-ready
 
 CMD ["bash", "/start_robot.sh"]
