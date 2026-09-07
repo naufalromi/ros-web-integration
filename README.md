@@ -47,19 +47,19 @@ cd ros-web-integration
 cp .env.example .env
 # Edit .env and replace both database passwords.
 docker compose up -d --build
-export BACKEND_URL=http://localhost:3000
+export BACKEND_URL=http://localhost
 python3 listener.py
 ```
 
 ### Browser
 
-Open `http://localhost:3000`. For a browser on another machine in the same
+Open `http://localhost`. For a browser on another machine in the same
 network, set `ROSBRIDGE_URL=ws://<docker-host-ip>:9090` in `.env`, restart the
-`web` service, then open `http://<docker-host-ip>:3000`.
+`web` service, then open `http://<docker-host-ip>`.
 
 ## Startup Order
 
 1. Copy `.env.example` to `.env` and set passwords.
 2. Run `docker compose up -d --build`.
-3. Run `BACKEND_URL=http://localhost:3000 python3 listener.py` on the Docker host.
+3. Run `BACKEND_URL=http://localhost python3 listener.py` on the Docker host.
 4. Open the browser URL above.

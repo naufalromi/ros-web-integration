@@ -5,7 +5,7 @@ import os
 import sys
 import re
 
-BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:3000')
+BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost')
 POLL_INTERVAL = int(os.environ.get('POLL_INTERVAL', '3'))
 CONTAINER_NAME = 'ros_turtlebot3_container'
 ROS_SETUP = 'source /opt/ros/noetic/setup.bash'
