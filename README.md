@@ -1,24 +1,28 @@
 # ROS Web Teleoperation
 
-Web-based teleoperation system for Turtlebot3 Waffle simulation using ROS Noetic, Gazebo 11, and a hybrid cloud-edge architecture.
+Web-based teleoperation system for Turtlebot3 Waffle simulation using ROS Noetic and Gazebo 11.
 
 ## Architecture
 
 ```
-Browser  <-->  Azure VM (server.js + MySQL)  <-->  Laptop (listener.py + Docker)
-                                                           |
-                                                     Gazebo + ROS
+Browser  <-->  Web container  <-->  MySQL container
+                  |
+                  +-----------> ROS/Gazebo container
+                                     ^
+                                     |
+                              listener.py (host)
 ```
 
-- **Azure VM**: Express.js server, MySQL database, web cloudflared tunnel (HTTPS)
-- **Laptop**: Docker container (Gazebo, rosbridge, web_video_server), listener.py, 2 cloudflared tunnels (rosbridge + camera)
+Docker Compose manages the web application, MySQL, and ROS/Gazebo together. The
+listener remains on the Docker host because it starts and stops Gazebo through
+the local Docker socket.
 
 ## Tech Stack
 
 - ROS Noetic, Gazebo 11, rosbridge_server, web_video_server
-- Node.js (Express), MySQL
+- Node.js (Express), MySQL 8
 - Python 3 (listener)
-- Docker, Cloudflared tunnels
+- Docker Compose
 - Frontend: HTML5, Tailwind CSS, roslibjs
 
 ## Features
@@ -32,35 +36,30 @@ Browser  <-->  Azure VM (server.js + MySQL)  <-->  Laptop (listener.py + Docker)
 
 ## Setup
 
-### Azure VM
+### Docker host
+
+Requirements: Docker Engine with Compose, Python 3, and the Python `requests`
+package for the listener.
 
 ```bash
-sudo apt update && sudo apt install -y nodejs npm mysql-server git
-cd ~ && git clone <repo-url> ros-web-challenge
-cd ~/ros-web-challenge/web && npm install
-sudo mysql -u root robot_db < ~/ros-web-challenge/db_schema.sql
-sudo PORT=80 node web/server.js
-cloudflared tunnel --url http://localhost:80 > tunnel_web.log 2>&1 &
-```
-
-### Laptop
-
-```bash
-docker compose up -d
-export BACKEND_URL=http://<azure-vm-ip>:80
+git clone <repo-url> ros-web-integration
+cd ros-web-integration
+cp .env.example .env
+# Edit .env and replace both database passwords.
+docker compose up -d --build
+export BACKEND_URL=http://localhost:3000
 python3 listener.py
-cloudflared tunnel --url http://localhost:9090 > tunnel_ws.log 2>&1 &
-cloudflared tunnel --url http://localhost:8080 > tunnel_cam.log 2>&1 &
 ```
 
 ### Browser
 
-Open `http://<azure-vm-ip>` (auto-redirects to HTTPS tunnel). Wait for auto-connect.
+Open `http://localhost:3000`. For a browser on another machine in the same
+network, set `ROSBRIDGE_URL=ws://<docker-host-ip>:9090` in `.env`, restart the
+`web` service, then open `http://<docker-host-ip>:3000`.
 
 ## Startup Order
 
-1. Azure VM: `sudo PORT=80 node web/server.js` + cloudflared web tunnel
-2. Laptop: `docker compose up -d`
-3. Laptop: cloudflared tunnels (ws + cam)
-4. Laptop: `python3 listener.py`
-5. Browser: open `http://<azure-vm-ip>`
+1. Copy `.env.example` to `.env` and set passwords.
+2. Run `docker compose up -d --build`.
+3. Run `BACKEND_URL=http://localhost:3000 python3 listener.py` on the Docker host.
+4. Open the browser URL above.

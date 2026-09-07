@@ -1,4 +1,37 @@
 services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: robot_db
+      MYSQL_USER: ${DB_USER:-robot_app}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    ports:
+      - "3000:3000"
+    environment:
+      DB_HOST: db
+      DB_NAME: robot_db
+      DB_USER: ${DB_USER:-robot_app}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      ROSBRIDGE_URL: ${ROSBRIDGE_URL:-ws://localhost:9090}
+      CAMERA_URL: ${CAMERA_URL:-http://ros-master:8080}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   ros-master:
     build: .
     container_name: ros_turtlebot3_container
@@ -9,3 +42,6 @@ services:
       - TURTLEBOT3_MODEL=waffle
     privileged: true
     restart: unless-stopped
+
+volumes:
+  mysql_data:
