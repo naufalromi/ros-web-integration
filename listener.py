@@ -3,7 +3,6 @@ import subprocess
 import time
 import os
 import sys
-import re
 
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost')
 POLL_INTERVAL = int(os.environ.get('POLL_INTERVAL', '3'))
@@ -122,37 +121,8 @@ def stop_gazebo():
     print('Container stopped')
     return True
 
-def extract_url(log_file):
-    if not os.path.exists(log_file):
-        return None
-    with open(log_file) as f:
-        for line in f:
-            m = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
-            if m:
-                return m.group()
-    return None
-
-def send_tunnel_urls():
-    ws_url = extract_url('tunnel_ws.log')
-    cam_url = extract_url('tunnel_cam.log')
-    web_url = extract_url('tunnel_web.log')
-    if ws_url or cam_url or web_url:
-        try:
-            r = requests.post(f'{BACKEND_URL}/api/config/tunnels',
-                            json={
-                                'rosbridgeUrl': ws_url,
-                                'cameraUrl': cam_url,
-                                'webUrl': web_url
-                            },
-                            timeout=10)
-            if r.status_code == 200:
-                print(f'Tunnel URLs sent: ws={ws_url}, cam={cam_url}, web={web_url}')
-        except Exception as e:
-            print(f'Failed to send tunnel URLs: {e}')
-
 def main():
     print(f'Listener started. Backend URL: {BACKEND_URL}')
-    send_tunnel_urls()
     while True:
         try:
             resp = requests.get(f'{BACKEND_URL}/api/robot/pending-command', timeout=10)

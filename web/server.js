@@ -5,14 +5,13 @@ const mysql = require('mysql2');
 const cors = require('cors');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
-const fs = require('fs');
 const http = require('http');
 const https = require('https');
 
 const app = express();
 app.set('trust proxy', 1);
 
-const allowedOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['http://localhost:3000'];
+const allowedOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['http://localhost', 'http://localhost:3000'];
 app.use(cors({
     origin: allowedOrigins,
     methods: ['GET', 'POST'],
@@ -37,33 +36,17 @@ app.use('/api/log', logLimiter);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-const tunnelConfig = { rosbridgeUrl: '', cameraUrl: '', webUrl: '' };
-
-function getTunnelUrl() {
-    if (tunnelConfig.webUrl) return tunnelConfig.webUrl;
-    try {
-        const log = fs.readFileSync(path.join(__dirname, '..', 'tunnel_web.log'), 'utf8');
-        const m = log.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
-        if (m) {
-            tunnelConfig.webUrl = m[0];
-            return m[0];
-        }
-    } catch (_) {}
-    return '';
-}
-
 app.get('/api/config', (req, res) => {
     res.json({
-        rosbridgeUrl: tunnelConfig.rosbridgeUrl || process.env.ROSBRIDGE_URL || '',
+        rosbridgeUrl: process.env.ROSBRIDGE_URL || '',
         // The browser always loads camera frames through this server.  The
         // camera source itself may safely remain an internal HTTP endpoint.
-        cameraAvailable: Boolean(tunnelConfig.cameraUrl || process.env.CAMERA_URL),
-        webUrl: getTunnelUrl()
+        cameraAvailable: Boolean(process.env.CAMERA_URL)
     });
 });
 
 app.get('/api/camera/stream', (req, res) => {
-    const cameraUrl = tunnelConfig.cameraUrl || process.env.CAMERA_URL;
+    const cameraUrl = process.env.CAMERA_URL;
     if (!cameraUrl) {
         return res.status(503).json({ error: 'Camera source is not configured' });
     }
@@ -94,26 +77,6 @@ app.get('/api/camera/stream', (req, res) => {
         else res.destroy(err);
     });
     req.on('close', () => upstream.destroy());
-});
-
-const TUNNEL_URL_PATTERN = /^https?:\/\/[a-zA-Z0-9.-]+\.trycloudflare\.com$/;
-
-app.post('/api/config/tunnels', (req, res) => {
-    const { rosbridgeUrl, cameraUrl, webUrl } = req.body;
-    if (rosbridgeUrl && !TUNNEL_URL_PATTERN.test(rosbridgeUrl)) {
-        return res.status(400).json({ error: 'Invalid rosbridge URL' });
-    }
-    if (cameraUrl && !TUNNEL_URL_PATTERN.test(cameraUrl)) {
-        return res.status(400).json({ error: 'Invalid camera URL' });
-    }
-    if (webUrl && !TUNNEL_URL_PATTERN.test(webUrl)) {
-        return res.status(400).json({ error: 'Invalid web URL' });
-    }
-    if (rosbridgeUrl) tunnelConfig.rosbridgeUrl = rosbridgeUrl;
-    if (cameraUrl) tunnelConfig.cameraUrl = cameraUrl;
-    if (webUrl) tunnelConfig.webUrl = webUrl;
-    console.log('Tunnel URLs updated');
-    res.json({ ok: true });
 });
 
 if (!process.env.DB_USER || !process.env.DB_PASSWORD) {
